@@ -27,6 +27,10 @@ from useradmin.models import User
 
 from indexer.indexers.sql import SQLIndexer
 
+from beeswax.conf import MAX_NUMBER_OF_SESSIONS, CLOSE_SESSIONS
+from beeswax.models import Session
+from beeswax.server.dbms import get_query_server_config, QueryServerException
+from beeswax.server.hive_server2_lib import HiveServerTable, HiveServerClient
 
 if sys.version_info[0] > 2:
   from unittest.mock import patch, Mock, MagicMock
@@ -71,7 +75,15 @@ class TestSQLIndexer(object):
     destination.__getitem__.side_effect = destination_dict
 
     with patch('notebook.models.get_interpreter') as get_interpreter:
-      notebook = SQLIndexer(user=self.user, fs=fs).create_table_from_a_file(source, destination)
+      with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+        server_config = get_query_server_config(name='beeswax')
+        KazooClient.return_value = Mock(
+          # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+          exists=Mock(return_value=True),
+          get_children=Mock(
+            return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+        )
+        notebook = SQLIndexer(user=self.user, fs=fs).create_table_from_a_file(source, destination)
 
     assert_equal(
       [statement.strip() for statement in u'''DROP TABLE IF EXISTS `default`.`hue__tmp_export_table`;
@@ -197,7 +209,15 @@ def test_generate_create_text_table_with_data_partition():
   }
   request = MockRequest(fs=MockFs())
 
-  sql = SQLIndexer(user=request.user, fs=request.fs).create_table_from_a_file(source, destination).get_str()
+  with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+    server_config = get_query_server_config(name='beeswax')
+    KazooClient.return_value = Mock(
+      # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+      exists=Mock(return_value=True),
+      get_children=Mock(
+        return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+    )
+    sql = SQLIndexer(user=request.user, fs=request.fs).create_table_from_a_file(source, destination).get_str()
 
   assert_true('''USE default;''' in sql, sql)
 

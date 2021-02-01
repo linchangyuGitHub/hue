@@ -79,22 +79,30 @@ class TestApi():
   def test_show_tables(self):
     grant_access("test", "default", "metastore")
     with patch('beeswax.server.dbms.get') as get:
-      get.return_value = Mock(
-        get_databases=Mock(
-          return_value=['sfdc']
-        ),
-        get_database=Mock(
-          return_value={}
-        ),
-        get_tables_meta=Mock(
-          return_value=[{'name': 'customer'}, {'name': 'opportunities'}]
-        ),
-        server_name='hive'
-      )
+      with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+        server_config = get_query_server_config(name='beeswax')
+        KazooClient.return_value = Mock(
+          # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+          exists=Mock(return_value=True),
+          get_children=Mock(
+            return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+        )
+        get.return_value = Mock(
+          get_databases=Mock(
+            return_value=['sfdc']
+          ),
+          get_database=Mock(
+            return_value={}
+          ),
+          get_tables_meta=Mock(
+            return_value=[{'name': 'customer'}, {'name': 'opportunities'}]
+          ),
+          server_name='hive'
+        )
 
-      response = self.client.post('/metastore/tables/sfdc?format=json')
+        response = self.client.post('/metastore/tables/sfdc?format=json')
 
-      get.assert_called()
+        get.assert_called()
 
     assert_equal(response.status_code, 200)
     data = json.loads(response.content)

@@ -61,7 +61,7 @@ try:
   from beeswax.design import hql_query
   from beeswax.models import QUERY_TYPES, HiveServerQueryHandle, HiveServerQueryHistory, QueryHistory, Session
   from beeswax.server import dbms
-  from beeswax.server.dbms import get_query_server_config, QueryServerException
+  from beeswax.server.dbms import get_query_server_config, QueryServerException, reset_ha, reset_DBMSCACHE
   from beeswax.views import parse_out_jobs, parse_out_queries
 except ImportError as e:
   LOG.warn('Hive and HiveServer2 interfaces are not enabled: %s' % e)
@@ -180,17 +180,36 @@ class HS2Api(Api):
   def create_session(self, lang='hive', properties=None):
     application = 'beeswax' if lang == 'hive' or lang == 'llap' else lang
 
-    if has_session_pool():
-      session = Session.objects.get_tez_session(self.user, application, MAX_NUMBER_OF_SESSIONS.get())
-    elif not has_multiple_sessions():
-      session = Session.objects.get_session(self.user, application=application)
-    else:
-      session = None
+    try:
+      if has_session_pool():
+        bool_has_pool = False
+        session = Session.objects.get_tez_session(self.user, application, MAX_NUMBER_OF_SESSIONS.get())
+      elif not has_multiple_sessions():
+        bool_has_pool = True
+        session = Session.objects.get_session(self.user, application=application)
+      else:
+        session = None
+    except Exception as e:
+      LOG.exception('HA failover?')
+      if 'Connection refused' in str(e) or 'Name or service not known' in str(e):
+        reset_ha()
+        session = db.open_session(self.user)
+        if bool_has_pool:
+          session = Session.objects.get_session(self.user, application=application)
+        else:
+          session = Session.objects.get_tez_session(self.user, application, MAX_NUMBER_OF_SESSIONS.get())
 
     reuse_session = session is not None
     if not reuse_session:
       db = dbms.get(self.user, query_server=get_query_server_config(name=lang, connector=self.interpreter))
-      session = db.open_session(self.user)
+      try:
+        session = db.open_session(self.user)
+      except Exception as e:
+        LOG.info('HA failover?')
+        if 'Connection refused' in str(e) or 'Name or service not known' in str(e):
+          reset_ha()
+          db = dbms.get(self.user, query_server=get_query_server_config(name=lang, connector=self.interpreter))
+          session = db.open_session(self.user)
 
     response = {
       'type': lang,

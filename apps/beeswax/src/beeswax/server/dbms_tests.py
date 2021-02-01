@@ -46,14 +46,22 @@ class TestGetQueryServerConfig():
 
     with patch('beeswax.conf.HIVE_SERVER_HOST.get') as HIVE_SERVER_HOST:
       with patch('beeswax.conf.HIVE_SERVER_PORT.get') as HIVE_SERVER_PORT:
-        HIVE_SERVER_HOST.return_value = 'hive.gethue.com'
-        HIVE_SERVER_PORT.return_value=10002
+        with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+          HIVE_SERVER_HOST.return_value = 'hive-llap-1.gethue.com'
+          HIVE_SERVER_PORT.return_value = 10002
 
-        query_server = get_query_server_config()
+          query_server = get_query_server_config(name='beeswax')
 
-        assert_equal(query_server['server_name'], 'beeswax')
-        assert_equal(query_server['server_host'], 'hive.gethue.com')
-        assert_equal(query_server['server_port'], 10002)
+          KazooClient.return_value = Mock(
+            # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+            exists=Mock(return_value=True),
+            get_children=Mock(
+            return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+          )
+
+          assert_equal(query_server['server_name'], 'beeswax')
+          assert_equal(query_server['server_host'], 'hive-llap-1.gethue.com')
+          assert_equal(query_server['server_port'], 10002)
 
 
   def test_get_impala(self):
@@ -61,7 +69,7 @@ class TestGetQueryServerConfig():
     with patch('impala.conf.SERVER_HOST.get') as SERVER_HOST:
       with patch('impala.conf.SERVER_PORT.get') as SERVER_PORT:
         SERVER_HOST.return_value = 'impala.gethue.com'
-        SERVER_PORT.return_value=10002
+        SERVER_PORT.return_value = 10002
 
         query_server = get_query_server_config(name='impala')
 
@@ -75,7 +83,7 @@ class TestGetQueryServerConfig():
     with patch('beeswax.conf.LLAP_SERVER_HOST.get') as LLAP_SERVER_HOST:
       with patch('beeswax.conf.LLAP_SERVER_PORT.get') as LLAP_SERVER_PORT:
         LLAP_SERVER_HOST.return_value = 'hive-llap.gethue.com'
-        LLAP_SERVER_PORT.return_value=10002
+        LLAP_SERVER_PORT.return_value = 10002
 
         query_server = get_query_server_config(name='llap')
 

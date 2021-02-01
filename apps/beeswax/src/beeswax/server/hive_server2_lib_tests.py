@@ -822,27 +822,35 @@ class TestSessionManagement():
       with patch('beeswax.server.hive_server2_lib.thrift_util.get_client') as get_client:
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
           with patch('beeswax.server.hive_server2_lib.Session.objects.get_session') as get_session:
-            open_session.return_value = MagicMock(status_code=0)
-            get_session.return_value = None
-            fn = MagicMock(attr='test')
-            req = MagicMock()
-            server_config = get_query_server_config(name='beeswax')
+            with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+              open_session.return_value = MagicMock(status_code=0)
+              get_session.return_value = None
+              fn = MagicMock(attr='test')
+              req = MagicMock()
+              server_config = get_query_server_config(name='beeswax')
 
-            client = HiveServerClient(server_config, self.user)
+              KazooClient.return_value = Mock(
+                # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+                exists=Mock(return_value=True),
+                get_children=Mock(
+                  return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+              )
 
-            (res, session1) = client.call(fn, req, status=None)
-            open_session.assert_called_once()
+              client = HiveServerClient(server_config, self.user)
 
-            # Reuse session from argument
-            (res, session2) = client.call(fn, req, status=None, session=session1)
-            open_session.assert_called_once() # open_session should not be called again, because we're reusing session
-            assert_equal(session1, session2)
+              (res, session1) = client.call(fn, req, status=None)
+              open_session.assert_called_once()
 
-            # Reuse session from get_session
-            get_session.return_value = session1
-            (res, session3) = client.call(fn, req, status=None)
-            open_session.assert_called_once() # open_session should not be called again, because we're reusing session
-            assert_equal(session1, session3)
+              # Reuse session from argument
+              (res, session2) = client.call(fn, req, status=None, session=session1)
+              open_session.assert_called_once() # open_session should not be called again, because we're reusing session
+              assert_equal(session1, session2)
+
+              # Reuse session from get_session
+              get_session.return_value = session1
+              (res, session3) = client.call(fn, req, status=None)
+              open_session.assert_called_once() # open_session should not be called again, because we're reusing session
+              assert_equal(session1, session3)
     finally:
       for f in finish:
         f()
@@ -857,27 +865,35 @@ class TestSessionManagement():
       with patch('beeswax.server.hive_server2_lib.thrift_util.get_client') as get_client:
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
           with patch('beeswax.server.hive_server2_lib.Session.objects.get_tez_session') as get_session:
-            open_session.return_value = MagicMock(status_code=0)
-            get_session.return_value = None
-            fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
-            req = MagicMock()
-            server_config = get_query_server_config(name='beeswax')
+            with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+              open_session.return_value = MagicMock(status_code=0)
+              get_session.return_value = None
+              fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
+              req = MagicMock()
+              server_config = get_query_server_config(name='beeswax')
 
-            client = HiveServerClient(server_config, self.user)
+              KazooClient.return_value = Mock(
+                # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+                exists=Mock(return_value=True),
+                get_children=Mock(
+                  return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+              )
 
-            (res, session1) = client.call(fn, req, status=None)
-            open_session.assert_called_once()
+              client = HiveServerClient(server_config, self.user)
 
-            # Reuse session from argument
-            (res, session2) = client.call(fn, req, status=None, session=session1)
-            open_session.assert_called_once() # open_session should not be called again, because we're reusing session
-            assert_equal(session1, session2)
+              (res, session1) = client.call(fn, req, status=None)
+              open_session.assert_called_once()
 
-            # Reuse session from get_session
-            get_session.return_value = session1
-            (res, session3) = client.call(fn, req, status=None)
-            open_session.assert_called_once() # open_session should not be called again, because we're reusing session
-            assert_equal(session1, session3)
+              # Reuse session from argument
+              (res, session2) = client.call(fn, req, status=None, session=session1)
+              open_session.assert_called_once() # open_session should not be called again, because we're reusing session
+              assert_equal(session1, session2)
+
+              # Reuse session from get_session
+              get_session.return_value = session1
+              (res, session3) = client.call(fn, req, status=None)
+              open_session.assert_called_once() # open_session should not be called again, because we're reusing session
+              assert_equal(session1, session3)
     finally:
       for f in finish:
         f()
@@ -892,15 +908,22 @@ class TestSessionManagement():
       with patch('beeswax.server.hive_server2_lib.thrift_util.get_client') as get_client:
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
           with patch('beeswax.server.hive_server2_lib.Session.objects.get_tez_session') as get_tez_session:
-            get_tez_session.side_effect = Exception('')
-            open_session.return_value = MagicMock(status_code=0)
-            fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
-            req = MagicMock()
-            server_config = get_query_server_config(name='beeswax')
+            with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+              get_tez_session.side_effect = Exception('')
+              open_session.return_value = MagicMock(status_code=0)
+              fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
+              req = MagicMock()
+              server_config = get_query_server_config(name='beeswax')
+              KazooClient.return_value = Mock(
+                # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+                exists=Mock(return_value=True),
+                get_children=Mock(
+                  return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+              )
 
-            client = HiveServerClient(server_config, self.user)
+              client = HiveServerClient(server_config, self.user)
 
-            assert_raises(Exception, client.call, fn, req, status=None)
+              assert_raises(Exception, client.call, fn, req, status=None)
     finally:
       for f in finish:
         f()
@@ -914,26 +937,34 @@ class TestSessionManagement():
     try:
       with patch('beeswax.server.hive_server2_lib.thrift_util.get_client') as get_client:
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
-          open_session.return_value = MagicMock(status_code=0)
-          fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
-          req = MagicMock()
-          server_config = get_query_server_config(name='beeswax')
+          with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+            open_session.return_value = MagicMock(status_code=0)
+            fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
+            req = MagicMock()
+            server_config = get_query_server_config(name='beeswax')
 
-          client = HiveServerClient(server_config, self.user)
+            KazooClient.return_value = Mock(
+              # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+              exists=Mock(return_value=True),
+              get_children=Mock(
+                return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+            )
 
-          (res, session1) = client.call(fn, req, status=None)
-          open_session.assert_called_once()
+            client = HiveServerClient(server_config, self.user)
 
-          # Reuse session from argument
-          (res, session2) = client.call(fn, req, status=None, session=session1)
-          open_session.assert_called_once() # open_session should not be called again, because we're reusing session
-          assert_equal(session1, session2)
+            (res, session1) = client.call(fn, req, status=None)
+            open_session.assert_called_once()
 
-          # Create new session
-          open_session.return_value = MagicMock(status_code=0)
-          (res, session3) = client.call(fn, req, status=None)
-          assert_equal(open_session.call_count, 2)
-          assert_not_equal(session1, session3)
+            # Reuse session from argument
+            (res, session2) = client.call(fn, req, status=None, session=session1)
+            open_session.assert_called_once() # open_session should not be called again, because we're reusing session
+            assert_equal(session1, session2)
+
+            # Create new session
+            open_session.return_value = MagicMock(status_code=0)
+            (res, session3) = client.call(fn, req, status=None)
+            assert_equal(open_session.call_count, 2)
+            assert_not_equal(session1, session3)
     finally:
       for f in finish:
         f()
@@ -949,44 +980,52 @@ class TestSessionManagement():
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
           with patch('beeswax.server.hive_server2_lib.HiveServerClient.close_session') as close_session:
             with patch('beeswax.server.hive_server2_lib.HiveServerTRowSet') as HiveServerTRowSet:
-              status = MagicMock(status=MagicMock(statusCode=0))
-              status_return = MagicMock(return_value=status)
-              get_client.return_value = MagicMock(
-                  return_value=status, GetSchemas=status_return, FetchResults=status_return, GetResultSetMetadata=status_return,
-                  CloseOperation=status_return, ExecuteStatement=status_return, GetTables=status_return, GetColumns=status_return
-              )
-              open_session.return_value = MagicMock(status_code=0)
-              server_config = get_query_server_config(name='beeswax')
+              with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+                status = MagicMock(status=MagicMock(statusCode=0))
+                status_return = MagicMock(return_value=status)
+                get_client.return_value = MagicMock(
+                    return_value=status, GetSchemas=status_return, FetchResults=status_return, GetResultSetMetadata=status_return,
+                    CloseOperation=status_return, ExecuteStatement=status_return, GetTables=status_return, GetColumns=status_return
+                )
+                open_session.return_value = MagicMock(status_code=0)
+                server_config = get_query_server_config(name='beeswax')
 
-              client = HiveServerClient(server_config, self.user)
+                KazooClient.return_value = Mock(
+                  # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+                  exists=Mock(return_value=True),
+                  get_children=Mock(
+                    return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+                )
 
-              res = client.get_databases()
-              assert_equal(open_session.call_count, 1)
-              assert_equal(close_session.call_count, 1)
+                client = HiveServerClient(server_config, self.user)
 
-              res = client.get_database(MagicMock())
-              assert_equal(open_session.call_count, 2)
-              assert_equal(close_session.call_count, 2)
+                res = client.get_databases()
+                assert_equal(open_session.call_count, 1)
+                assert_equal(close_session.call_count, 1)
 
-              res = client.get_tables_meta(MagicMock(), MagicMock())
-              assert_equal(open_session.call_count, 3)
-              assert_equal(close_session.call_count, 3)
+                res = client.get_database(MagicMock())
+                assert_equal(open_session.call_count, 2)
+                assert_equal(close_session.call_count, 2)
 
-              res = client.get_tables(MagicMock(), MagicMock())
-              assert_equal(open_session.call_count, 4)
-              assert_equal(close_session.call_count, 4)
+                res = client.get_tables_meta(MagicMock(), MagicMock())
+                assert_equal(open_session.call_count, 3)
+                assert_equal(close_session.call_count, 3)
 
-              res = client.get_table(MagicMock(), MagicMock())
-              assert_equal(open_session.call_count, 5)
-              assert_equal(close_session.call_count, 5)
+                res = client.get_tables(MagicMock(), MagicMock())
+                assert_equal(open_session.call_count, 4)
+                assert_equal(close_session.call_count, 4)
 
-              res = client.get_columns(MagicMock(), MagicMock())
-              assert_equal(open_session.call_count, 6)
-              assert_equal(close_session.call_count, 6)
+                res = client.get_table(MagicMock(), MagicMock())
+                assert_equal(open_session.call_count, 5)
+                assert_equal(close_session.call_count, 5)
 
-              res = client.get_partitions(MagicMock(), MagicMock()) # get_partitions does 2 requests with 1 session each
-              assert_equal(open_session.call_count, 8)
-              assert_equal(close_session.call_count, 8)
+                res = client.get_columns(MagicMock(), MagicMock())
+                assert_equal(open_session.call_count, 6)
+                assert_equal(close_session.call_count, 6)
+
+                res = client.get_partitions(MagicMock(), MagicMock()) # get_partitions does 2 requests with 1 session each
+                assert_equal(open_session.call_count, 8)
+                assert_equal(close_session.call_count, 8)
     finally:
       for f in finish:
         f()
@@ -1001,18 +1040,22 @@ class TestSessionManagement():
       with patch('beeswax.server.hive_server2_lib.thrift_util.get_client') as get_client:
         with patch('beeswax.server.hive_server2_lib.HiveServerClient.open_session') as open_session:
           with patch('beeswax.server.hive_server2_lib.Session.objects.get_n_sessions') as get_n_sessions:
-            get_n_sessions.return_value = MagicMock(count=MagicMock(return_value=2))
-            open_session.return_value = MagicMock(status_code=0)
-            fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
-            req = MagicMock()
-            server_config = get_query_server_config(name='beeswax')
-
-            client = HiveServerClient(server_config, self.user)
-            assert_raises(Exception, client.call, fn, req, status=None)
-
-            get_n_sessions.return_value = MagicMock(count=MagicMock(return_value=1))
-            (res, session1) = client.call(fn, req, status=None)
-            open_session.assert_called_once()
+            with patch('beeswax.server.dbms.KazooClient') as KazooClient:
+              get_n_sessions.return_value = MagicMock(count=MagicMock(return_value=2))
+              open_session.return_value = MagicMock(status_code=0)
+              fn = MagicMock(return_value=MagicMock(status=MagicMock(statusCode=0)))
+              req = MagicMock()
+              server_config = get_query_server_config(name='beeswax')
+              KazooClient.return_value = Mock(
+                # Bug "TypeError: expected string or buffer" if False, to add a new test case and fix
+                exists=Mock(return_value=True),
+                get_children=Mock(
+                  return_value=['serverUri=hive-llap-1.gethue.com:10002;serverUri=hive-llap-2.gethue.com:10002'])
+              )
+              client = HiveServerClient(server_config, self.user)
+              assert_raises(Exception, client.call, fn, req, status=None)
+              get_n_sessions.return_value = MagicMock(count=MagicMock(return_value=1))
+              (res, session1) = client.call(fn, req, status=None)
     finally:
       for f in finish:
         f()

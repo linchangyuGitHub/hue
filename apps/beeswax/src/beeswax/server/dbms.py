@@ -65,7 +65,16 @@ cache = caches[CACHES_HIVE_DISCOVERY_KEY]
 
 # Using file cache to make sure eventlet threads are uniform, this cache is persistent on startup
 # So we clear it to make sure the server resets hiveserver2 host.
-cache.clear()
+def reset_ha():
+  cache.clear()
+
+reset_ha()
+
+def reset_DBMSCACHE():
+  cache.clear()
+  DBMS_CACHE.clear()
+
+reset_DBMSCACHE()
 
 
 def get(user, query_server=None, cluster=None):
@@ -166,19 +175,39 @@ def get_query_server_config(name='beeswax', connector=None):
 
     elif name != 'hms' and name != 'impala':
       activeEndpoint = cache.get("hiveserver2")
+      zk = KazooClient(hosts=libzookeeper_conf.ENSEMBLE.get(), read_only=True)
+      zk.start()
+      znode = HIVE_DISCOVERY_HIVESERVER2_ZNODE.get()
+      if zk.exists(znode):
+        LOG.debug("Selecting up Hive server via the following node {0}".format(znode))
+        hiveservers = zk.get_children(znode)
       if activeEndpoint is None:
         if HIVE_DISCOVERY_HS2.get():
-          zk = KazooClient(hosts=libzookeeper_conf.ENSEMBLE.get(), read_only=True)
-          zk.start()
-          znode = HIVE_DISCOVERY_HIVESERVER2_ZNODE.get()
-          LOG.info("Selecting up Hive server via the following node {0}".format(znode))
-          if zk.exists(znode):
-            hiveservers = zk.get_children(znode)
-            LOG.info("Available Hive Servers: {0}".format(hiveservers))
-            if not hiveservers:
-              raise PopupException(_('There is no running Hive server available'))
-            server_to_use = 0  # if CONF.HIVE_SPREAD.get() randint(0, len(hiveservers)-1) else 0
-            LOG.info("Selected Hive server {0}: {1}".format(server_to_use, hiveservers[server_to_use]))
+          LOG.debug("Available Hive Servers: {0}".format(hiveservers))
+          if not hiveservers:
+            raise PopupException(_('There is no running Hive server available'))
+          server_to_use = 0  # if CONF.HIVE_SPREAD.get() randint(0, len(hiveservers)-1) else 0
+          LOG.debug("Selected Hive server {0}: {1}".format(server_to_use, hiveservers[server_to_use]))
+          cache.set(
+            "hiveserver2",
+            json.dumps({
+              "host": hiveservers[server_to_use].split(";")[0].split("=")[1].split(":")[0],
+              "port": hiveservers[server_to_use].split(";")[0].split("=")[1].split(":")[1]
+            })
+          )
+        else:
+          cache.set("hiveserver2", json.dumps({"host": HIVE_SERVER_HOST.get(), "port": HIVE_HTTP_THRIFT_PORT.get()}))
+      elif activeEndpoint is not None:
+      # Replace ActiveEndpoint if the current HS2 is down
+        if (len(hiveservers) > 0):
+          server_to_use = 0 # if CONF.HIVE_SPREAD.get() randint(0, len(hiveservers)-1) else 0
+          hs2_HostName = hiveservers[server_to_use].split(";")[0].split("=")[1].split(":")[0]
+          hs2_inActiveEndpoint = hs2_HostName in activeEndpoint
+          LOG.debug("Is the current HS2 active {0}".format(hs2_inActiveEndpoint))
+          if not (hs2_inActiveEndpoint):
+            reset_DBMSCACHE()
+            server_to_use = 0 # if CONF.HIVE_SPREAD.get() randint(0, len(hiveservers)-1) else 0
+            LOG.debug("Selected HiveServer {0}: {1}".format(server_to_use, hiveservers[server_to_use]))
             cache.set(
               "hiveserver2",
               json.dumps({
@@ -186,12 +215,7 @@ def get_query_server_config(name='beeswax', connector=None):
                 "port": hiveservers[server_to_use].split(";")[0].split("=")[1].split(":")[1]
               })
             )
-          else:
-            cache.set("hiveserver2", json.dumps({"host": HIVE_SERVER_HOST.get(), "port": HIVE_HTTP_THRIFT_PORT.get()}))
-          zk.stop()
-        else:
-          cache.set("hiveserver2", json.dumps({"host": HIVE_SERVER_HOST.get(), "port": HIVE_HTTP_THRIFT_PORT.get()}))
-
+      zk.stop()
       activeEndpoint = json.loads(cache.get("hiveserver2"))
 
     if name == 'impala':
@@ -201,7 +225,7 @@ def get_query_server_config(name='beeswax', connector=None):
       kerberos_principal = get_hiveserver2_kerberos_principal(HIVE_SERVER_HOST.get())
       query_server = {
           'server_name': 'hms',
-          'server_host': HIVE_METASTORE_HOST.get() if not cluster_config else cluster_config.get('server_host'),
+          'server_host': activeEndpoint["host"] if not cluster_config else cluster_config.get('server_host'),
           'server_port': HIVE_METASTORE_PORT.get(),
           'principal': kerberos_principal,
           'transport_mode': 'http' if hiveserver2_transport_mode() == 'HTTP' else 'socket',
