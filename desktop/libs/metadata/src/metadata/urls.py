@@ -88,6 +88,7 @@ urlpatterns += [
   url(r'^api/optimizer/table_details/?$', metadata_optimizer_api.table_details, name='table_details'),
 
   url(r'^api/optimizer/query_risk/?$', metadata_optimizer_api.query_risk, name='query_risk'),
+  url(r'^api/optimizer/predict/?$', metadata_optimizer_api.predict, name='predict'),
   url(r'^api/optimizer/query_compatibility/?$', metadata_optimizer_api.query_compatibility, name='query_compatibility'),
   url(r'^api/optimizer/similar_queries/?$', metadata_optimizer_api.similar_queries, name='similar_queries'),
 ]
